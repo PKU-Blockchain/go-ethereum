@@ -55,7 +55,9 @@ type Config struct {
 type Interpreter interface {
 	// Run loops and evaluates the contract's code with the given input data and returns
 	// the return byte-slice and an error if one occurred.
-	Run(contract *Contract, input []byte, static bool) ([]byte, error)
+	// by lanying
+	//Run(contract *Contract, input []byte, static bool) ([]byte, error)
+	Run(contract *Contract, input []byte, static bool) (ret []byte, opNum []int, err error)
 	// CanRun tells if the contract, passed as an argument, can be
 	// run by the current interpreter. This is meant so that the
 	// caller can do something like:
@@ -140,7 +142,7 @@ func (in *EVMInterpreter) enforceRestrictions(op OpCode, operation operation, st
 // It's important to note that any errors returned by the interpreter should be
 // considered a revert-and-consume-all-gas operation except for
 // errExecutionReverted which means revert-and-keep-gas-left.
-func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (ret []byte, err error) {
+func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (ret []byte, opNum []int, err error) {
 	if in.intPool == nil {
 		in.intPool = poolOfIntPools.get()
 		defer func() {
@@ -166,7 +168,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 	// Don't bother with the execution if there's no code.
 	if len(contract.Code) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var (
@@ -199,6 +201,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			}
 		}()
 	}
+
+	//by lanying
+	opNum=append(opNum, 0,0,0,0)
+
 	// The Interpreter main run loop (contextual). This loop runs until either an
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
@@ -214,14 +220,14 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		op = contract.GetOp(pc)
 		operation := in.cfg.JumpTable[op]
 		if !operation.valid {
-			return nil, fmt.Errorf("invalid opcode 0x%x", int(op))
+			return nil, opNum, fmt.Errorf("invalid opcode 0x%x", int(op))
 		}
 		if err := operation.validateStack(stack); err != nil {
-			return nil, err
+			return nil, opNum, err
 		}
 		// If the operation is valid, enforce and write restrictions
 		if err := in.enforceRestrictions(op, operation, stack); err != nil {
-			return nil, err
+			return nil, opNum, err
 		}
 
 		var memorySize uint64
@@ -230,19 +236,19 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		if operation.memorySize != nil {
 			memSize, overflow := bigUint64(operation.memorySize(stack))
 			if overflow {
-				return nil, errGasUintOverflow
+				return nil, opNum, errGasUintOverflow
 			}
 			// memory is expanded in words of 32 bytes. Gas
 			// is also calculated in words.
 			if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
-				return nil, errGasUintOverflow
+				return nil, opNum, errGasUintOverflow
 			}
 		}
 		// consume the gas and return an error if not enough gas is available.
 		// cost is explicitly set so that the capture state defer method can get the proper cost
 		cost, err = operation.gasCost(in.gasTable, in.evm, contract, stack, mem, memorySize)
 		if err != nil || !contract.UseGas(cost) {
-			return nil, ErrOutOfGas
+			return nil, opNum, ErrOutOfGas
 		}
 		if memorySize > 0 {
 			mem.Resize(memorySize)
@@ -260,6 +266,21 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		if verifyPool {
 			verifyIntegerPool(in.intPool)
 		}
+		// by lanying
+		// why write here : see jump_table' operation function, the returns flag of (add,sub) isn't set
+		if res != nil{
+			// 记录指令次数
+				switch {
+				case res[0]==0:
+					opNum[0]++
+				case res[0]==1:
+					opNum[1]++
+				case res[0]==2:
+					opNum[2]++
+				case res[0]==3:
+					opNum[3]++
+				}
+			}
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {
@@ -268,16 +289,17 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		switch {
 		case err != nil:
-			return nil, err
+			return nil, opNum, err
 		case operation.reverts:
-			return res, errExecutionReverted
+			return res, opNum, errExecutionReverted
 		case operation.halts:
-			return res, nil
+			return res, opNum, nil
 		case !operation.jumps:
 			pc++
 		}
 	}
-	return nil, nil
+	
+	return nil,opNum, nil
 }
 
 // CanRun tells if the contract, passed as an argument, can be
