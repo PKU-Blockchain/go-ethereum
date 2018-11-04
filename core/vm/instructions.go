@@ -37,32 +37,35 @@ var (
 	errMaxCodeSizeExceeded   = errors.New("evm: max code size exceeded")
 )
 
-func opAdd(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+func opAdd(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) (ret []byte, err error) {
 	x, y := stack.pop(), stack.peek()
 	math.U256(y.Add(x, y))
 
 	interpreter.intPool.put(x)
-	return nil, nil
+	ret=append(ret,0)
+	return ret, nil
 }
 
-func opSub(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+func opSub(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) (ret []byte, err error) {
 	x, y := stack.pop(), stack.peek()
 	math.U256(y.Sub(x, y))
 
 	interpreter.intPool.put(x)
-	return nil, nil
+	ret=append(ret,1)
+	return ret, nil
 }
 
-func opMul(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+func opMul(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) (ret []byte, err error) {
 	x, y := stack.pop(), stack.pop()
 	stack.push(math.U256(x.Mul(x, y)))
 
 	interpreter.intPool.put(y)
 
-	return nil, nil
+	ret=append(ret,2)
+	return ret, nil
 }
 
-func opDiv(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+func opDiv(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) (ret []byte, err error) {
 	x, y := stack.pop(), stack.peek()
 	if y.Sign() != 0 {
 		math.U256(y.Div(x, y))
@@ -70,7 +73,8 @@ func opDiv(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *
 		y.SetUint64(0)
 	}
 	interpreter.intPool.put(x)
-	return nil, nil
+	ret=append(ret,3)
+	return ret, nil
 }
 
 func opSdiv(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
